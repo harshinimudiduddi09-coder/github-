@@ -1,0 +1,133 @@
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+import os
+
+# Different website URLs
+websites = [
+    "https://en.wikipedia.org/wiki/Internet_of_things",
+    "https://www.ibm.com/think/topics/internet-of-things",
+    "https://aws.amazon.com/what-is/iot/"
+]
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+# Create main folder
+os.makedirs("Web_Scraping_Data", exist_ok=True)
+
+# Scraping each website
+for index, url in enumerate(websites, start=1):
+
+    print("\n===================================")
+    print("WEBSITE:", url)
+    print("===================================")
+
+    try:
+        # 1. Retrieve HTML
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=15
+        )
+
+        response.raise_for_status()
+        html_text = response.text
+
+        print("\n1. HTML CONTENT")
+        print(html_text[:1000])
+
+        # 2. Parse HTML
+        soup = BeautifulSoup(html_text, "html.parser")
+
+        # 3. Extract Title
+        print("\n2. WEBPAGE TITLE")
+
+        if soup.title:
+            print(soup.title.get_text(strip=True))
+
+        # 4. Extract Headings
+        print("\n3. HEADINGS")
+
+        for heading in soup.find_all(["h1", "h2", "h3"]):
+            print(heading.get_text(" ", strip=True))
+
+        # 5. Extract Paragraphs
+        print("\n4. PARAGRAPHS")
+
+        for paragraph in soup.find_all("p"):
+            text = paragraph.get_text(" ", strip=True)
+
+            if text:
+                print(text)
+
+        # 6. Download Images
+        print("\n5. DOWNLOADING IMAGES")
+
+        folder = f"Web_Scraping_Data/Website_{index}"
+        os.makedirs(folder, exist_ok=True)
+
+        count = 1
+
+        for img in soup.find_all("img"):
+
+            if count > 5:
+                break
+
+            image_url = (
+                img.get("src")
+                or img.get("data-src")
+            )
+
+            if not image_url:
+                continue
+
+            image_url = urljoin(url, image_url)
+
+            try:
+                img_response = requests.get(
+                    image_url,
+                    headers=headers,
+                    timeout=15
+                )
+
+                img_response.raise_for_status()
+
+                content_type = img_response.headers.get(
+                    "Content-Type", ""
+                ).split(";")[0]
+
+                if not content_type.startswith("image/"):
+                    continue
+
+                extension = {
+                    "image/jpeg": ".jpg",
+                    "image/png": ".png",
+                    "image/webp": ".webp",
+                    "image/gif": ".gif"
+                }.get(content_type)
+
+                if not extension:
+                    continue
+
+                filepath = os.path.join(
+                    folder,
+                    str(count) + extension
+                )
+
+                with open(filepath, "wb") as file:
+                    file.write(img_response.content)
+
+                print("Image downloaded:", filepath)
+                count += 1
+
+            except requests.RequestException:
+                print("Unable to download this image")
+
+        print("\nWebsite scraping completed!")
+
+    except requests.RequestException as error:
+        print("Unable to access website:", error)
+
+print("\nALL EXPERIMENTS COMPLETED!")
